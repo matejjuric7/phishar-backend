@@ -1,14 +1,20 @@
 import express from 'express';
 
-import urlScraper from '../scraper.js';
+import linkScraper from '../scraper.js';
 
 const router = express.Router();
 
 router.post('/', async (req, res) => {
-  console.log('STARTED');
-  const data = await urlScraper(req.body.url);
-  res.json(data);
-  console.log('FINISHED');
+  try {
+    const data = await linkScraper(req.body.url);
+    if (!data) {
+      throw new Error('Something went wrong');
+    }
+    res.json(data);
+  } catch (error) {
+    console.log('ERROR', error);
+    res.json({ error: error.message });
+  }
 });
 
 export default router;
