@@ -1,81 +1,117 @@
 import puppeteer from 'puppeteer';
-import _ from 'lodash';
 
-const urlScraper = async (DESTINATION_URL) => {
+const includeProtocol = (url) => {
+  if (!url.includes('http://') && !url.includes('https://')) {
+    return `https://${url}`; // needs to be secure
+  }
+  return url;
+};
+
+const linkScraper = async (destinationUrl) => {
+  let browser; // so it's accessible inside catch
   try {
-    const browser = await puppeteer.launch({ headless: true });
-    const page = await browser.newPage();
+    const URL = includeProtocol(destinationUrl);
 
-    await page.goto(DESTINATION_URL, {
-      waitUntil: 'networkidle2',
-    });
+    browser = await puppeteer.launch({ headless: false });
+    const page = await browser.newPage();
+    await page.goto(URL, { waitUntil: 'networkidle2' });
+    await page.addScriptTag({ path: './node_modules/lodash/lodash.min.js' });
 
     const data = await page.evaluate(
-      ({ DESTINATION_URL }) => {
+      async ({ URL }) => {
+        const getAllLinks = () => {
+          const allATags = document.querySelectorAll('a');
+          const allScriptTags = document.querySelectorAll('script');
+          const links = [...allATags, ...allScriptTags];
+
+          const result = [];
+          for (const link of links) {
+            if (link.href) result.push(link.href);
+            else if (link.src) result.push(link.src);
+          }
+          return result;
+        };
+
         const getMeta = (metaName) => {
           const metas = document.querySelectorAll('meta');
 
-          for (let i = 0; i < metas.length; i++) {
-            if (metas[i].getAttribute('name') === metaName) {
-              return metas[i].getAttribute('content');
+          for (const meta of metas) {
+            if (meta.getAttribute('name') === metaName) {
+              return meta.getAttribute('content');
             }
           }
 
           return '';
         };
 
-        const allATags = document.querySelectorAll('a');
-        const links = [];
+        const getCounts = (urls, domain) => {
+          let httpCount = 0;
+          let httpsCount = 0;
+          let sameDomainCount = 0;
+          let differentDomainCount = 0;
 
-        for (const link of allATags) {
-          links.push(link.href);
-        }
-        const title = document.title;
-        const description = getMeta('description');
-        const twitterDescription = getMeta('twitter:description');
+          for (const url of urls) {
+            if (url.startsWith('https://')) httpsCount++;
+            else if (url.startsWith('http://')) httpCount++;
 
-        const uniqueLinks = _.uniq(links);
-        const urls = _.filter(
-          uniqueLinks,
-          (link) => !/^[tel|mailto]/.test(link)
-        );
+            if (url.includes(domain)) sameDomainCount++;
+            else differentDomainCount++;
+          }
 
-        let httpCounter = 0;
-        let httpsCounter = 0;
-        let sameDomain = 0;
-        let differentDomain = 0;
+          return {
+            httpCount,
+            httpsCount,
+            sameDomainCount,
+            differentDomainCount,
+          };
+        };
 
-        for (const url of urls) {
-          if (url.startsWith('https://')) httpsCounter++;
-          else if (url.startsWith('http://')) httpCounter++;
+        const processUrls = (links) => {
+          const _ = window._;
+          const uniqueLinks = _.uniq(links);
+          return _.sortBy(
+            _.filter(
+              uniqueLinks,
+              (link) => !/^[tel|mailto]/.test(link) && link !== ''
+            )
+          );
+        };
 
-          if (url.includes(DESTINATION_URL)) sameDomain++;
-          else differentDomain++;
-        }
+        const getDomain = () => {
+          const hostname = URL.split('/')[2]; // --> https://```www.google.com```/
+          return hostname.split('.').slice(-2).join('.'); // --> www.```google.com```
+        };
+
+        const links = getAllLinks();
+
+        const urls = processUrls(links);
+
+        const domain = getDomain();
+
+        const { httpCount, httpsCount, sameDomainCount, differentDomainCount } =
+          getCounts(urls, domain);
 
         return {
           links: urls,
-          title,
-          description,
-          twitterDescription,
-          httpCounter,
-          httpsCounter,
+          title: document.title,
+          description: getMeta('description'),
           totalUrlCount: urls.length,
-          sameDomain,
-          differentDomain,
+          httpCount,
+          httpsCount,
+          sameDomainCount,
+          differentDomainCount,
         };
       },
-      { DESTINATION_URL }
+      { URL }
     );
 
     await browser.close();
+
     return data;
-    // setTimeout(async () => {
-    //   await browser.close();
-    // }, 6000);
   } catch (err) {
     console.log('ERROR', err);
+    await browser.close();
   }
 };
 
-export default urlScraper;
+export default linkScraper;
