@@ -12,7 +12,7 @@ const linkScraper = async (destinationUrl) => {
   try {
     const URL = includeProtocol(destinationUrl);
 
-    browser = await puppeteer.launch({ headless: false });
+    browser = await puppeteer.launch({ headless: true });
     const page = await browser.newPage();
     await page.goto(URL, { waitUntil: 'networkidle2' });
     await page.addScriptTag({ path: './node_modules/lodash/lodash.min.js' });
