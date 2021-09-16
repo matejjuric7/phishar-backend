@@ -4,6 +4,8 @@ import linkScraper from '../scraper.js';
 
 const router = express.Router();
 
+router.get('/', (_, res) => res.json({ ok: 'ok' }));
+
 router.post('/', async (req, res) => {
   try {
     const data = await linkScraper(req.body.url);
